@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Njangi: savings circles no treasurer can run off with</title>
+<meta name="description" content="Rotating savings circles on NEAR. Each circle's money sits in its own Sputnik DAO; the contract pays the pot out automatically, and members vote on everything else." />
+<link rel="icon" href="./favicon.svg" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700;12..96,800&family=Inter:wght@400;500;600&display=swap" rel="stylesheet" />
+</head>
+<body>
+<header class="top">
+  <a class="brand" href="#/"><span class="logo">●</span> Njangi</a>
+  <nav>
+    <a href="#/">Circles</a>
+    <a href="#/new">Start a circle</a>
+    <a href="#/how">How it works</a>
+  </nav>
+  <button id="wallet" class="btn small">Connect wallet</button>
+</header>
+<main id="app"></main>
+<footer class="foot">
+  <span>NEAR <b>testnet</b> · contract <a id="contract-link" target="_blank" rel="noopener"></a></span>
+  <span>Open source · <a href="https://github.com/mbanyadev/njangi" target="_blank" rel="noopener">GitHub</a> · built at NEAR HACKATHON</span>
+</footer>
+<div id="toast"></div>
+<script type="module" src="./src/main.ts"></script>
+</body>
+</html>
