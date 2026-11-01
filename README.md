@@ -85,6 +85,7 @@ near contract deploy <your-account>.testnet use-file target/near/njangi.wasm \
   network-config testnet sign-with-keychain send
 # web
 cd web && npm ci && npm run dev     # set CONTRACT in web/src/near.ts
+./scripts/deploy-pages.sh         # publish to GitHub Pages (gh-pages branch)
 ```
 
 ## Honest limits
