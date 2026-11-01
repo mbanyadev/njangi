@@ -236,9 +236,27 @@ fn reputation_gate_blocks_join() {
     c.contribute(0);
     ctx("mbanya-fam.sputnikv2.testnet", 0, 1200);
     c.dao_cover_default(0, acc("chi.testnet"));
-    // ama starts a circle that needs score >= 0
+    // ama starts a circle that needs score >= 10
     ctx("ama.testnet", 6 * NEAR, 1300);
-    c.create_circle("Trusted".into(), "trusted".into(), members(), U128(NEAR), U64(100), 0, 0);
+    c.create_circle("Trusted".into(), "trusted".into(), members(), U128(NEAR), U64(100), 0, 10);
     ctx("chi.testnet", 0, 1301);
     c.join(1);
+}
+
+#[test]
+fn open_circle_admits_members_with_a_bad_record() {
+    let mut c = setup();
+    ctx("ama.testnet", NEAR, 1010);
+    c.contribute(0);
+    ctx("bih.testnet", NEAR, 1020);
+    c.contribute(0);
+    ctx("mbanya-fam.sputnikv2.testnet", 0, 1200);
+    c.dao_cover_default(0, acc("chi.testnet"));
+    assert!(c.get_reputation(acc("chi.testnet")).score < 0);
+    // min_reputation 0 means open to everyone
+    ctx("ama.testnet", 6 * NEAR, 1300);
+    c.create_circle("Open".into(), "open".into(), members(), U128(NEAR), U64(100), 0, 0);
+    ctx("chi.testnet", 0, 1301);
+    c.join(1);
+    assert!(c.get_circle(1).unwrap().joined.iter().filter(|j| **j).count() >= 2);
 }

@@ -10,7 +10,7 @@ export const CONTRACT = "njangi-app.testnet";
 export const NETWORK = "testnet";
 export const RPC = "https://rpc.testnet.near.org";
 export const EXPLORER = "https://testnet.nearblocks.io";
-const RPCS = [RPC, "https://test.rpc.fastnear.com"];
+const RPCS = ["https://test.rpc.fastnear.com", RPC];
 
 let selector: WalletSelector;
 let modal: WalletSelectorModal;
@@ -24,7 +24,12 @@ export async function initWallet(onChange: () => void) {
   selector.store.observable.subscribe(() => onChange());
 }
 
+// Optional signer hook used only by the scripted demo recording (scripts/record/). Never set in normal use.
+type DevSigner = { accountId: string; call: (receiver: string, method: string, args: object, deposit: string, tgas: number) => Promise<unknown> };
+const dev = () => (window as unknown as { __njangiDevSigner?: DevSigner }).__njangiDevSigner;
+
 export function accountId(): string | null {
+  if (dev()) return dev()!.accountId;
   const s = selector?.store.getState();
   return s?.accounts.find((a) => a.active)?.accountId ?? null;
 }
@@ -64,11 +69,28 @@ export async function balance(account: string): Promise<bigint> {
 }
 
 export async function call(method: string, args: object, depositYocto = "0", tgas = 300, receiver = CONTRACT) {
+  if (dev()) return dev()!.call(receiver, method, args, depositYocto, tgas);
   const w = await selector.wallet();
   return w.signAndSendTransaction({
     receiverId: receiver,
     actions: [actionCreators.functionCall(method, args, BigInt(tgas) * 10n ** 12n, BigInt(depositYocto))],
   });
+}
+
+// ---------- FCFA (XAF) reference price, so amounts mean something to a Cameroonian saver
+let xafPerNear = 2500; // fallback, replaced by a live CoinGecko quote when reachable
+export async function loadFcfa(): Promise<boolean> {
+  try {
+    const r = await fetch("https://api.coingecko.com/api/v3/simple/price?ids=near&vs_currencies=xaf", { signal: AbortSignal.timeout(4000) });
+    const v = (await r.json())?.near?.xaf;
+    if (typeof v === "number" && v > 0) { xafPerNear = v; return true; }
+  } catch { /* keep fallback */ }
+  return false;
+}
+export function fcfa(yocto: string | bigint): string {
+  const n = Number(BigInt(yocto) / 10n ** 18n) / 1e6 * xafPerNear;
+  const r = n >= 10000 ? Math.round(n / 100) * 100 : Math.round(n / 10) * 10;
+  return `≈ ${r.toLocaleString("fr-FR").replace(/\u202f|\u00a0/g, " ")} FCFA`;
 }
 
 // ---------- formatting

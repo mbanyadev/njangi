@@ -244,7 +244,7 @@ impl Contract {
         require!(period_secs.0 >= MIN_PERIOD_SECS, "Period must be at least 60 seconds");
         require!(fund_bps <= MAX_FUND_BPS, "Social fund share is at most 20%");
         require!(
-            self.score_of(&creator) >= min_reputation,
+            min_reputation <= 0 || self.score_of(&creator) >= min_reputation,
             "Your reputation is below this circle's minimum"
         );
 
@@ -399,7 +399,8 @@ impl Contract {
         require!(c.status == CircleStatus::Forming, "Circle is not forming");
         let i = c.index_of(&who).unwrap_or_else(|| env::panic_str("You are not invited to this circle"));
         require!(!c.joined[i], "Already joined");
-        require!(score >= c.min_reputation, "Your reputation is below this circle's minimum");
+        // A minimum of 0 or less means the circle is open to everyone, including members with a bad record.
+        require!(c.min_reputation <= 0 || score >= c.min_reputation, "Your reputation is below this circle's minimum");
         c.joined[i] = true;
         emit("member_joined", json!({"circle_id": circle_id, "member": who, "score": score}));
         self.try_activate(circle_id);

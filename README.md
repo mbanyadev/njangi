@@ -2,6 +2,7 @@
 
 **Live app (NEAR testnet):** https://mbanyadev.github.io/njangi/
 **Contract:** [`njangi-app.testnet`](https://testnet.nearblocks.io/address/njangi-app.testnet) · **Tracks:** Social Money (primary), Real-World Money
+**Demo video (2 min, real testnet transactions):** [docs/demo.mp4](docs/demo.mp4)
 
 ![Circle page](docs/circle.png)
 
@@ -22,9 +23,11 @@ No new multisig and no custom custody code. The money sits in battle-tested Sput
 
 | Do this | You should see |
 |---|---|
-| Open https://mbanyadev.github.io/njangi/ | The home page with live stats read from testnet: circles, members, NEAR paid out automatically |
-| Click the **Bamenda Market Women** card | The turn order, who already received the pot, and the DAO's proposals. Payouts are marked *keeper, automatic*; the turn-swap shows member votes |
-| Click **njangi-ama** | Her reputation: +10 for paying on time, −15 for paying late, so she's in the "Watch" tier |
+| Open https://mbanyadev.github.io/njangi/ | The home page with live stats read from testnet: circles, members, NEAR paid out automatically (with an FCFA estimate) |
+| Click **Commercial Avenue Traders** | A live weekly circle: two pots already paid out automatically, this round's chips showing who has paid, and the DAO's *keeper, automatic* payout proposals |
+| Click **Bamenda Market Women** | The oldest demo circle (3-minute rounds, now overdue on purpose). It shows a member vote that swapped two turns, and a late payment |
+| Click **njangi-ama** in any turn order | Her reputation history: +10 for each on-time payment, −15 for one late payment |
+| Click **Trusted Savers Gold Circle** | A circle that only admits members with 40+ reputation (the *Trusted* tier) |
 | Click **Start a circle**, connect a testnet wallet (MyNearWallet or Meteor), and list your account plus a friend's, with *5 minutes (demo)* | A new `<name>.sputnikv2.testnet` DAO is created (6 Ⓝ testnet storage deposit). Your circle appears on the home page as *Forming* |
 | Have the friend open the circle and click **Join**, then both click **Pay** | When the second payment lands, the pot (minus the social-fund share) arrives in the first member's wallet, with no extra click |
 
@@ -73,7 +76,10 @@ Events are emitted as NEP-297 `EVENT_JSON` with standard `njangi`.
   - Round 1 paid 2.25 Ⓝ to ama automatically (DAO proposal #0, *Approved* by the keeper).
   - Members voted 3/5 to swap chi's and eko's turns (proposal #1).
   - Round 2 paid bih (proposal #2) after ama paid late (her reputation is now −5).
-- 14 unit tests (`cd contract && cargo test`) cover activation, the policy check, exact payments, late payers, release retries, completion, swaps, DAO-only methods, covering defaults, and the reputation gate.
+- Circle 1, *Mile 4 Teachers*: three members, three rounds, completed (+20 reputation each).
+- Circle 2, *Commercial Avenue Traders* (`traders-1793565479.sputnikv2.testnet`): weekly, 1 Ⓝ, 10% social fund. Rounds 1 and 2 paid to bih and eko automatically; the round 2 payout is the one recorded in the demo video.
+- Circle 3, *Trusted Savers Gold Circle*: 30-day rounds with a 40-point reputation gate, still forming.
+- 15 unit tests (`cd contract && cargo test`) cover activation, the policy check, exact payments, late payers, release retries, completion, swaps, DAO-only methods, covering defaults, the reputation gate, and open circles (`min_reputation <= 0` admits anyone, including members with a negative record).
 
 ## Run it yourself
 
@@ -94,8 +100,12 @@ cd web && npm ci && npm run dev     # set CONTRACT in web/src/near.ts
 - A member who never pays can only be *covered* by a vote. There is no collateral yet; reputation and the minimum-reputation gate are the deterrent.
 - Each circle costs about 6 Ⓝ of DAO storage. A shared-DAO mode for tiny circles is a possible next step.
 
-## Built with AI
+## Built with
 
-Built during NEAR HACKATHON (Nov 2026) by Mbanya Dev with AI coding assistance. All code in this repo was written during the hackathon.
+- **Contract:** Rust, [near-sdk](https://github.com/near/near-sdk-rs) 5.x, `serde_json`, built with `cargo-near`; deployed and seeded with [near-cli-rs](https://github.com/near/near-cli-rs).
+- **Treasury:** [Sputnik DAO v2](https://github.com/near-daos/sputnik-dao-contract) via the `sputnikv2.testnet` factory (not modified).
+- **Web:** TypeScript + [Vite](https://vitejs.dev), [NEAR Wallet Selector](https://github.com/near/wallet-selector) (MyNearWallet, Meteor), `@near-js/transactions`, `buffer`. Public RPC from FastNEAR and near.org. NEAR→FCFA estimate from the CoinGecko public API (falls back to 2500 FCFA/Ⓝ).
+- **Demo video:** recorded with Playwright (headless Chromium) and ffmpeg; narration by Microsoft Edge TTS (`edge-tts`, voice en-NG-Ezinne). For the recording, the page was given a test-only hook so transactions are signed with the demo accounts' **testnet** keys instead of a wallet popup; a badge on screen says so. The hook does nothing in normal use.
+- **AI:** built during NEAR HACKATHON (Nov 2026) by Mbanya Dev with AI coding assistance (an AI agent wrote most of the code, under review). All code in this repo was written during the hackathon.
 
 MIT licensed.

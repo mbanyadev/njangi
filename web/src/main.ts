@@ -1,6 +1,6 @@
 import "./polyfill";
 import "./style.css";
-import { CONTRACT, EXPLORER, accountId, balance, call, initWallet, near, nsToDate, signIn, signOut, toYocto, view } from "./near";
+import { CONTRACT, EXPLORER, accountId, balance, call, fcfa, initWallet, loadFcfa, near, nsToDate, signIn, signOut, toYocto, view } from "./near";
 import type { Circle, Proposal, Reputation, RoundView } from "./types";
 
 const app = document.getElementById("app")!;
@@ -57,10 +57,12 @@ function ring(c: Circle, size = 132) {
 }
 
 async function home() {
+  const my = seq;
   const count = await view<number>("get_circle_count");
   const circles = (await view<Circle[]>("get_circles", { from_index: 0, limit: 50 })).reverse();
   const totalPaid = circles.reduce((s, c) => s + c.payouts.reduce((t, p) => t + BigInt(p.amount), 0n), 0n);
   const members = new Set(circles.flatMap((c) => c.members)).size;
+  if (my !== seq) return; // a newer page was opened meanwhile
   app.innerHTML = `
   <section class="hero">
     <div>
@@ -74,12 +76,20 @@ async function home() {
     <div class="stats">
       <div class="stat y"><b>${count}</b><span>circles</span></div>
       <div class="stat g"><b>${members}</b><span>members</span></div>
-      <div class="stat r"><b>${near(totalPaid)} Ⓝ</b><span>paid out automatically</span></div>
+      <div class="stat r"><b>${near(totalPaid)} Ⓝ</b><span>paid out automatically · ${fcfa(totalPaid)}</span></div>
     </div>
   </section>
+  <div class="mini">
+    <div><b>1</b> Everyone pays into the circle's own DAO, never to a person</div>
+    <div><b>2</b> The last payment of the round sends the whole pot to whoever's turn it is, automatically</div>
+    <div><b>3</b> Paying on time builds a reputation that follows you to the next circle</div>
+  </div>
   <h2 class="sec">Circles</h2>
   <div class="grid">${circles.map(card).join("") || `<p class="muted">No circles yet. <a href="#/new">Start the first one.</a></p>`}</div>`;
 }
+
+function gate(c: Circle) { return c.min_reputation > 0 ? ` · <span class="tier gold">${tierName(c.min_reputation)}+ only (≥ ${c.min_reputation})</span>` : ""; }
+function tierName(score: number) { return tier(score)[0]; }
 
 function card(c: Circle) {
   const pot = BigInt(c.contribution) * BigInt(c.members.length);
@@ -89,14 +99,23 @@ function card(c: Circle) {
     <div class="cbody">
       <span class="pill ${c.status.toLowerCase()}">${c.status}</span>
       <h3>${esc(c.name)}</h3>
-      <p>${near(c.contribution)} Ⓝ every ${period(+c.period_secs)} · pot ${near(pot)} Ⓝ</p>
-      <p class="muted">${next ? `Round ${c.round + 1}: <b>${esc(short(next))}</b> collects` : c.status === "Forming" ? `${c.joined.filter(Boolean).length}/${c.members.length} joined` : "All rounds paid out"}</p>
+      <p>${near(c.contribution)} Ⓝ every ${period(+c.period_secs)} · pot ${near(pot)} Ⓝ <span class="muted small">(${fcfa(pot)})</span></p>
+      <p class="muted">${next ? `Round ${c.round + 1}: <b>${esc(short(next))}</b> collects · ${c.paid.filter(Boolean).length + c.covered.filter(Boolean).length}/${c.members.length} paid` : c.status === "Forming" ? `${c.joined.filter(Boolean).length}/${c.members.length} joined${gate(c)}` : `All ${c.members.length} rounds paid out ✓`}</p>
     </div></a>`;
 }
 
-async function circlePage(id: number) {
+let lastCircleJson = "";
+let party: { id: number; p: Circle["payouts"][number]; until: number } | null = null; // "pot paid" banner stays up for 90 s
+let seenPayouts: Record<number, number> = {};
+async function circlePage(id: number, quiet = false) {
+  const my = seq;
   const [c, r] = await Promise.all([view<Circle>("get_circle", { circle_id: id }), view<RoundView>("get_round", { circle_id: id })]);
   if (!c) { app.innerHTML = `<p>Circle not found.</p>`; return; }
+  if (id in seenPayouts && c.payouts.length > seenPayouts[id]) party = { id, p: c.payouts[c.payouts.length - 1], until: Date.now() + 90_000 };
+  seenPayouts[id] = c.payouts.length;
+  const fresh = party && party.id === id && Date.now() < party.until ? party.p : null;
+  if (quiet && JSON.stringify(c) === lastCircleJson) return;
+  lastCircleJson = JSON.stringify(c);
   const me = accountId();
   const myIdx = me ? c.members.indexOf(me) : -1;
   const [daoBal, proposals, reps] = await Promise.all([
@@ -104,7 +123,9 @@ async function circlePage(id: number) {
     view<Proposal[]>("get_proposals", { from_index: 0, limit: 100 }, c.dao).catch(() => [] as Proposal[]),
     Promise.all(c.members.map((m) => view<Reputation>("get_reputation", { account_id: m }))),
   ]);
-  const fund = BigInt(c.collected) - c.payouts.reduce((s, p) => s + BigInt(p.amount), 0n);
+  const pot = BigInt(c.contribution) * BigInt(c.members.length);
+  const fundShare = (pot * BigInt(c.fund_bps)) / 10000n;
+  const fund = c.payouts.reduce((s, p) => s + (pot - BigInt(p.amount)), 0n);
   const dl = c.status === "Active" ? nsToDate(r.deadline_ns) : null;
   let action = "";
   if (myIdx >= 0 && c.status === "Forming" && !c.joined[myIdx]) action = `<button class="btn" data-act="join">Join this circle</button>`;
@@ -112,14 +133,16 @@ async function circlePage(id: number) {
   else if (c.status === "Active" && r.unpaid.length === 0) action = `<button class="btn" data-act="release">Release the pot</button>`;
   else if (myIdx >= 0 && c.status === "Active") action = `<span class="ok">✓ You're settled for this round</span>`;
 
+  if (my !== seq) return; // a newer page was opened meanwhile
   app.innerHTML = `
   <a class="back" href="#/">← All circles</a>
+  ${fresh ? `<div class="party"><span class="emoji">🎉</span><div><b>Pot paid to ${esc(short(fresh.beneficiary))}: ${near(fresh.amount)} Ⓝ</b> <span>(${fcfa(fresh.amount)})</span><br/><span class="small">The last payment triggered it. The contract filed and approved DAO proposal #${esc(fresh.proposal_id)}; nobody had to press anything.</span></div></div>` : ""}
   <section class="chead">
     ${ring(c, 168)}
     <div>
       <span class="pill ${c.status.toLowerCase()}">${c.status}</span>
       <h1>${esc(c.name)}</h1>
-      <p class="lede">${c.members.length} members · ${near(c.contribution)} Ⓝ every ${period(+c.period_secs)} · ${c.fund_bps / 100}% of each pot goes to the social fund${c.min_reputation > 0 ? ` · needs reputation ≥ ${c.min_reputation}` : ""}</p>
+      <p class="lede">${c.members.length} members · ${near(c.contribution)} Ⓝ every ${period(+c.period_secs)} · ${c.fund_bps / 100}% of each pot goes to the social fund${gate(c)}</p>
       <p class="muted">Treasury: <a href="${tx(c.dao)}" target="_blank" rel="noopener">${esc(c.dao)}</a> · holds ${near(daoBal)} Ⓝ (incl. ~6 Ⓝ storage) ${c.dao_ready ? `<span class="ok">✓ keeper verified</span>` : `<span class="warn">DAO not verified yet</span>`}</p>
       <div class="cta">${action}</div>
     </div>
@@ -127,10 +150,11 @@ async function circlePage(id: number) {
   ${c.status === "Active" ? `
   <section class="round ${r.overdue ? "overdue" : ""}">
     <div><span class="kicker">Round ${c.round + 1} of ${c.members.length}</span>
-      <h2>${acct(r.beneficiary!)} collects <b>${near(r.pot)} Ⓝ</b></h2>
-      <p>${r.overdue ? `Deadline passed ${ago(dl!)}. Late payments still count (−15 reputation), or members can vote to cover a default from the social fund.` : `Deadline ${ago(dl!)} · ${dl!.toLocaleString()}`}</p></div>
+      <h2>${acct(r.beneficiary!)} collects <b>${near(r.pot)} Ⓝ</b> <span class="fc">${fcfa(r.pot)}</span></h2>
+      <p>${r.overdue ? `Deadline passed ${ago(dl!)}. Late payments still count (−15 reputation), or members can vote to cover a default from the social fund.` : `Deadline ${ago(dl!)} · ${dl!.toLocaleString("en-GB", { weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}`}</p></div>
     <div class="paybar">${c.members.map((m, i) => `<span class="${c.paid[i] ? "p" : c.covered[i] ? "c" : ""}" title="${esc(m)}"></span>`).join("")}</div>
-    <p class="muted">${r.paid.length} paid · ${r.covered.length} covered · ${r.unpaid.length} to go${r.unpaid.length ? `: ${r.unpaid.map(short).map(esc).join(", ")}` : ""}</p>
+    <div class="chips">${c.members.map((m, i) => `<span class="chip ${c.paid[i] ? "p" : c.covered[i] ? "c" : ""}">${c.paid[i] ? "✓" : c.covered[i] ? "☂" : "…"} ${esc(short(m))}</span>`).join("")}</div>
+    <p class="muted">${r.paid.length} of ${c.members.length} paid${r.covered.length ? ` · ${r.covered.length} covered` : ""}. ${r.unpaid.length ? "When the last member pays, the pot goes out automatically." : ""}</p>
   </section>` : ""}
   <div class="cols">
     <section class="panel">
@@ -142,7 +166,7 @@ async function circlePage(id: number) {
           ${acct(m)} <span class="tier ${col}">${t} · ${reps[i].score}</span>
           <span class="right">${p ? `<span class="ok">received ${near(p.amount)} Ⓝ</span>` : c.status === "Forming" ? (c.joined[i] ? "joined" : `<span class="muted">invited</span>`) : c.status === "Active" && i === c.round ? "<b>collecting now</b>" : `<span class="muted">round ${i + 1}</span>`}</span></li>`;
       }).join("")}</ol>
-      <p class="muted small">Social fund: ${near(fund > 0n ? fund : 0n)} Ⓝ kept in the DAO for emergencies and defaults.</p>
+      <p class="muted small">Social fund: <b>${near(fund > 0n ? fund : 0n)} Ⓝ</b> kept in the DAO for emergencies and defaults${c.status === "Active" && fundShare > 0n ? ` (grows by ${near(fundShare)} Ⓝ each round)` : ""}.</p>
     </section>
     <section class="panel">
       <h3>Members decide</h3>
@@ -200,10 +224,12 @@ function propRow(p: Proposal, c: Circle, me: string | null) {
 }
 
 async function memberPage(a: string) {
+  const my = seq;
   const [rep, ids] = await Promise.all([view<Reputation>("get_reputation", { account_id: a }), view<number[]>("get_member_circles", { account_id: a })]);
   const circles = await Promise.all(ids.map((id) => view<Circle>("get_circle", { circle_id: id })));
   const [t, col] = tier(rep.score);
   const label: Record<string, string> = { OnTime: "Paid on time", Late: "Paid late", Default: "Missed a payment (covered)", Received: "Received the pot", Completed: "Completed a circle" };
+  if (my !== seq) return; // a newer page was opened meanwhile
   app.innerHTML = `
   <a class="back" href="#/">← All circles</a>
   <section class="chead">
@@ -239,7 +265,7 @@ function newPage() {
       <label>Every<select name="period"><option value="300">5 minutes (demo)</option><option value="86400">day</option><option value="604800" selected>week</option><option value="2592000">30 days</option></select></label>
       <label>Social fund %<input name="fund" type="number" min="0" max="20" value="10"/></label>
     </div>
-    <label>Minimum reputation to join<input name="minrep" type="number" value="0"/></label>
+    <label>Who can join<select name="minrep"><option value="0" selected>Anyone I invite</option><option value="40">Trusted members only (reputation ≥ 40)</option><option value="100">Pillars only (reputation ≥ 100)</option></select></label>
     <button class="btn">${me ? "Create circle (6 Ⓝ deposit)" : "Connect a wallet to create"}</button>
   </form>`;
   (document.getElementById("f") as HTMLFormElement).onsubmit = (ev) => {
@@ -274,8 +300,11 @@ function howPage() {
 }
 
 // ---------------------------------------------------------------- router + wallet
+let seq = 0;
 async function route() {
+  seq++;
   const h = location.hash.replace(/^#\/?/, "");
+  lastCircleJson = "";
   const [p, arg] = h.split("/");
   app.classList.add("loading");
   try {
@@ -302,5 +331,12 @@ const cl = document.getElementById("contract-link") as HTMLAnchorElement;
 cl.textContent = CONTRACT; cl.href = tx(CONTRACT);
 window.addEventListener("hashchange", route);
 route();
+loadFcfa().then((ok) => { if (ok && !location.hash.startsWith("#/new")) route(); });
+// Keep circle pages live: re-read the chain every 6 s, unless the user is typing in a proposal form.
+setInterval(() => {
+  const [p, arg] = location.hash.replace(/^#\/?/, "").split("/");
+  if (p !== "circle" || document.hidden || document.querySelector("details.propose[open]")) return;
+  circlePage(+arg, true).catch(() => {});
+}, 6000);
 let last = "";
 initWallet(() => { renderWallet(); const a = accountId() ?? ""; if (a !== last) { last = a; route(); } }).then(renderWallet).catch((e) => console.warn("wallet", e));
