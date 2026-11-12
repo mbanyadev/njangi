@@ -105,7 +105,7 @@ cd web && npm ci && npm run dev     # set CONTRACT in web/src/near.ts
 - **Contract:** Rust, [near-sdk](https://github.com/near/near-sdk-rs) 5.x, `serde_json`, built with `cargo-near`; deployed and seeded with [near-cli-rs](https://github.com/near/near-cli-rs).
 - **Treasury:** [Sputnik DAO v2](https://github.com/near-daos/sputnik-dao-contract) via the `sputnikv2.testnet` factory (not modified).
 - **Web:** TypeScript + [Vite](https://vitejs.dev), [NEAR Wallet Selector](https://github.com/near/wallet-selector) (MyNearWallet, Meteor), `@near-js/transactions`, `buffer`. Public RPC from FastNEAR and near.org. NEAR→FCFA estimate from the CoinGecko public API (falls back to 2500 FCFA/Ⓝ).
-- **Demo video:** recorded with Playwright (headless Chromium) and ffmpeg; narration by Microsoft Edge TTS (`edge-tts`, voice en-NG-Ezinne). For the recording, the page was given a test-only hook so transactions are signed with the demo accounts' **testnet** keys instead of a wallet popup; a badge on screen says so. The hook does nothing in normal use.
+- **Demo video:** recorded with Playwright (headless Chromium) and ffmpeg; narrated by the builder in her own voice. For the recording, the page was given a test-only hook so transactions are signed with the demo accounts' **testnet** keys instead of a wallet popup; a badge on screen says so. The hook does nothing in normal use.
 - **AI:** built during NEAR HACKATHON (Nov 2026) by Mbanya Dev with AI coding assistance (an AI agent wrote most of the code, under review). All code in this repo was written during the hackathon.
 
 MIT licensed.
